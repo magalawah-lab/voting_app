@@ -18,6 +18,7 @@ export interface Student {
   first_name: string;
   last_name: string;
   class_id: string | null;
+  election_id: string | null;
   password: string;
   created_at: string;
 }

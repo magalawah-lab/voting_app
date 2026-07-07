@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Student, Class } from '@/lib/types';
+import { Student, Class, Election } from '@/lib/types';
 import Link from 'next/link';
 import ProtectedAdminRoute from '../../contexts/ProtectedRoute';
 
 export default function AdminStudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
+  const [elections, setElections] = useState<Election[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
@@ -20,9 +21,11 @@ export default function AdminStudentsPage() {
     first_name: '',
     last_name: '',
     class_id: '',
+    election_id: '',
     password: ''
   });
   const [batchClassId, setBatchClassId] = useState('');
+  const [batchElectionId, setBatchElectionId] = useState('');
 
   useEffect(() => {
     loadData();
@@ -30,20 +33,48 @@ export default function AdminStudentsPage() {
 
   const loadData = async () => {
     setLoading(true);
-    const [studentsRes, classesRes] = await Promise.all([
-      supabase.from('students').select('*, classes(name)'),
-      supabase.from('classes').select('*')
-    ]);
-    if (studentsRes.error) {
-      console.error('Error loading students:', studentsRes.error);
-      setMessage({ text: `Failed to load students: ${studentsRes.error.message}`, type: 'error' });
+    try {
+      // First, fetch classes and elections safely
+      const [classesRes, electionsRes] = await Promise.all([
+        supabase.from('classes').select('*'),
+        supabase.from('elections').select('*')
+      ]);
+      
+      if (classesRes.error) {
+        console.error('Error loading classes:', classesRes.error);
+      }
+      if (electionsRes.error) {
+        console.error('Error loading elections:', electionsRes.error);
+      }
+      
+      if (classesRes.data) setClasses(classesRes.data);
+      if (electionsRes.data) setElections(electionsRes.data);
+      
+      // Now fetch students
+      let studentsRes = await supabase.from('students').select('*');
+      
+      if (studentsRes.error) {
+        console.error('Error loading students:', studentsRes.error);
+        setMessage({ text: `Failed to load students: ${studentsRes.error?.message || 'Unknown error'}`, type: 'error' });
+      } else if (studentsRes.data) {
+        // Manually join the class and election names for display
+        const studentsWithNames = studentsRes.data.map(student => {
+          const studentClass = classesRes.data?.find(c => c.id === student.class_id);
+          const studentElection = electionsRes.data?.find(e => e.id === student.election_id);
+          return {
+            ...student,
+            classes: studentClass ? { name: studentClass.name } : null,
+            elections: studentElection ? { name: studentElection.name } : null
+          };
+        });
+        setStudents(studentsWithNames);
+      }
+    } catch (err) {
+      console.error('Unexpected error loading data:', err);
+      setMessage({ text: 'Failed to load data. Please try again.', type: 'error' });
+    } finally {
+      setLoading(false);
     }
-    if (classesRes.error) {
-      console.error('Error loading classes:', classesRes.error);
-    }
-    if (studentsRes.data) setStudents(studentsRes.data);
-    if (classesRes.data) setClasses(classesRes.data);
-    setLoading(false);
   };
 
   const generatePassword = () => {
@@ -59,16 +90,19 @@ export default function AdminStudentsPage() {
     e.preventDefault();
     try {
       const passwordToUse = formData.password || generatePassword();
-      const { data, error } = await supabase.from('students').insert([
-        { ...formData, password: passwordToUse }
-      ]).select();
+      const dataToInsert = {
+        ...formData,
+        password: passwordToUse,
+        election_id: formData.election_id || null
+      };
+      const { data, error } = await supabase.from('students').insert([dataToInsert]).select();
       if (error) {
         console.error('Error adding student:', error);
         setMessage({ text: `Failed to add student: ${error.message}`, type: 'error' });
         return;
       }
       setShowForm(false);
-      setFormData({ student_id: '', first_name: '', last_name: '', class_id: '', password: '' });
+      setFormData({ student_id: '', first_name: '', last_name: '', class_id: '', election_id: '', password: '' });
       setMessage({ 
         text: `Student added successfully! Temporary password: ${passwordToUse}`, 
         type: 'success' 
@@ -130,13 +164,17 @@ export default function AdminStudentsPage() {
   };
 
   const handleBatchEdit = async () => {
-    if (!batchClassId) {
-      setMessage({ text: 'Please select a class for batch edit', type: 'error' });
+    if (!batchClassId && !batchElectionId) {
+      setMessage({ text: 'Please select a class or election for batch edit', type: 'error' });
       return;
     }
 
     try {
-      const { error } = await supabase.from('students').update({ class_id: batchClassId }).in('id', selectedStudents);
+      const updateData: any = {};
+      if (batchClassId) updateData.class_id = batchClassId;
+      if (batchElectionId) updateData.election_id = batchElectionId;
+      
+      const { error } = await supabase.from('students').update(updateData).in('id', selectedStudents);
       if (error) {
         setMessage({ text: `Failed to update students: ${error.message}`, type: 'error' });
         return;
@@ -144,6 +182,8 @@ export default function AdminStudentsPage() {
       setMessage({ text: `${selectedStudents.length} students updated successfully!`, type: 'success' });
       setSelectedStudents([]);
       setShowBatchEdit(false);
+      setBatchClassId('');
+      setBatchElectionId('');
       setTimeout(() => setMessage(null), 5000);
       loadData();
     } catch (err) {
@@ -168,7 +208,7 @@ export default function AdminStudentsPage() {
   };
 
   const downloadTemplate = () => {
-    const templateContent = 'student_id,first_name,last_name,class_name,password\nS0001,John,Doe,10A,password123\nS0002,Jane,Smith,10B,password123';
+    const templateContent = 'student_id,first_name,last_name,class_name,election_name,password\nS0001,John,Doe,10A,Student Council 2024,password123\nS0002,Jane,Smith,10B,Student Council 2024,password123';
     const blob = new Blob([templateContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -195,12 +235,15 @@ export default function AdminStudentsPage() {
           if (values.length >= 4) {
             const className = values[3];
             const cls = classes.find(c => c.name === className);
-            const password = values[4] || generatePassword();
+            const electionName = values[4] || '';
+            const election = elections.find(e => e.name === electionName);
+            const password = values[5] || generatePassword();
             studentsToInsert.push({
               student_id: values[0],
               first_name: values[1],
               last_name: values[2],
               class_id: cls?.id || null,
+              election_id: election?.id || null,
               password
             });
           }
@@ -358,6 +401,19 @@ export default function AdminStudentsPage() {
                     ))}
                   </select>
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Election</label>
+                  <select
+                    value={formData.election_id}
+                    onChange={(e) => setFormData({ ...formData, election_id: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                  >
+                    <option value="">Select Election (optional)</option>
+                    {elections.map(election => (
+                      <option key={election.id} value={election.id}>{election.name} {election.is_active ? '(Active)' : ''}</option>
+                    ))}
+                  </select>
+                </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Password (optional - auto-generate if left blank)</label>
                   <input
@@ -385,7 +441,7 @@ export default function AdminStudentsPage() {
                 <h2 className="text-xl font-semibold mb-4">Batch Edit Students</h2>
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Select New Class</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Select New Class (optional)</label>
                     <select
                       value={batchClassId}
                       onChange={(e) => setBatchClassId(e.target.value)}
@@ -397,12 +453,25 @@ export default function AdminStudentsPage() {
                       ))}
                     </select>
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Select New Election (optional)</label>
+                    <select
+                      value={batchElectionId}
+                      onChange={(e) => setBatchElectionId(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                    >
+                      <option value="">Select Election</option>
+                      {elections.map(election => (
+                        <option key={election.id} value={election.id}>{election.name} {election.is_active ? '(Active)' : ''}</option>
+                      ))}
+                    </select>
+                  </div>
                   <div className="flex gap-3">
                     <button
                       onClick={handleBatchEdit}
                       className="flex-1 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700"
                     >
-                      Update Class
+                      Update Students
                     </button>
                     <button
                       onClick={() => setShowBatchEdit(false)}
@@ -431,6 +500,7 @@ export default function AdminStudentsPage() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student ID</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Class</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Election</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
@@ -448,6 +518,7 @@ export default function AdminStudentsPage() {
                     <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{student.student_id}</td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{student.first_name} {student.last_name}</td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{(student as any).classes?.name || '-'}</td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{(student as any).elections?.name || '-'}</td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm">
                       <button
                         onClick={() => handleDelete(student.id)}

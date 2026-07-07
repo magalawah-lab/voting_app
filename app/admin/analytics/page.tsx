@@ -334,33 +334,33 @@ export default function AdminAnalyticsPage() {
             </div>
           )}
 
-          <div className="bg-white rounded-xl shadow-lg p-6 mb-4 text-sm text-gray-600">
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-4 text-sm text-gray-800 font-medium">
             Loaded {votes.length} vote record{votes.length === 1 ? '' : 's'} and {students.length} student
             {students.length === 1 ? '' : 's'} from Supabase.
           </div>
 
           <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
-            <h2 className="text-xl font-semibold mb-4">Overall Voter Turnout</h2>
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Overall Voter Turnout</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="text-center">
-                <div className="text-4xl font-bold text-blue-600">{turnout.total}</div>
-                <div className="text-gray-600">Total Students</div>
+                <div className="text-4xl font-bold text-blue-700">{turnout.total}</div>
+                <div className="text-gray-800 font-medium mt-2">Total Students</div>
               </div>
               <div className="text-center">
-                <div className="text-4xl font-bold text-green-600">{turnout.voted}</div>
-                <div className="text-gray-600">Voted</div>
+                <div className="text-4xl font-bold text-green-700">{turnout.voted}</div>
+                <div className="text-gray-800 font-medium mt-2">Voted</div>
               </div>
               <div className="text-center">
-                <div className="text-4xl font-bold text-purple-600">{turnout.percentage.toFixed(1)}%</div>
-                <div className="text-gray-600">Turnout</div>
+                <div className="text-4xl font-bold text-purple-700">{turnout.percentage.toFixed(1)}%</div>
+                <div className="text-gray-800 font-medium mt-2">Turnout</div>
               </div>
             </div>
           </div>
 
           <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
-            <h2 className="text-xl font-semibold mb-4">Voter Breakdown</h2>
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Voter Breakdown</h2>
             <div className="mb-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-3">All Students (Total: {students.length})</h3>
+              <h3 className="text-lg font-bold text-gray-900 mb-3">All Students (Total: {students.length})</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-64 overflow-y-auto">
                 {students.map(student => {
                   const hasVotedAnyElection = votes.some(v => v.student_id === student.id);
@@ -379,17 +379,17 @@ export default function AdminAnalyticsPage() {
                             : 'bg-gray-50 border-gray-200'
                       }`}
                     >
-                      <div className="font-medium text-gray-900">
+                      <div className="font-bold text-gray-900">
                         {student.first_name} {student.last_name}
                       </div>
-                      <div className="text-xs text-gray-600">{student.student_id}</div>
-                      <div className="text-xs mt-1">
+                      <div className="text-sm text-gray-800 mt-1">{student.student_id}</div>
+                      <div className="text-sm mt-1">
                         {hasVotedSelectedElection ? (
-                          <span className="text-green-700 font-medium">Voted (Selected Election)</span>
+                          <span className="text-green-800 font-bold">Voted (Selected Election)</span>
                         ) : hasVotedAnyElection ? (
-                          <span className="text-yellow-700 font-medium">Voted (Other Election)</span>
+                          <span className="text-yellow-800 font-bold">Voted (Other Election)</span>
                         ) : (
-                          <span className="text-gray-500">Not Voted</span>
+                          <span className="text-gray-700 font-medium">Not Voted</span>
                         )}
                       </div>
                     </div>
@@ -400,16 +400,16 @@ export default function AdminAnalyticsPage() {
           </div>
 
           <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
-            <h2 className="text-xl font-semibold mb-4">Voter Turnout by Class</h2>
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Voter Turnout by Class</h2>
             <div className="space-y-4">
               {classTurnout.map(ct => (
                 <div key={ct.class} className="flex items-center justify-between">
-                  <span className="font-medium">{ct.class}</span>
+                  <span className="font-bold text-gray-900">{ct.class}</span>
                   <div className="flex items-center gap-4">
                     <div className="w-48 bg-gray-200 rounded-full h-3">
-                      <div className="bg-blue-500 h-3 rounded-full" style={{ width: `${ct.percentage}%` }} />
+                      <div className="bg-blue-600 h-3 rounded-full" style={{ width: `${ct.percentage}%` }} />
                     </div>
-                    <span className="text-sm text-gray-600">
+                    <span className="text-gray-800 font-medium">
                       {ct.voted}/{ct.total} ({ct.percentage.toFixed(1)}%)
                     </span>
                   </div>
@@ -421,23 +421,36 @@ export default function AdminAnalyticsPage() {
           <div className="space-y-8">
             {results.map(result => (
               <div key={result.position} className="bg-white rounded-xl shadow-lg p-6">
-                <h2 className="text-xl font-semibold mb-4">{result.position}</h2>
+                <h2 className="text-xl font-bold text-gray-900 mb-4">{result.position}</h2>
                 <div className="space-y-4">
                   {result.candidates.map(candidate => {
                     const maxVotes = result.candidates[0]?.votes ?? 0;
                     return (
-                      <div key={candidate.id} className="flex items-center justify-between">
-                        <span className="font-medium">{candidate.name}</span>
-                        <div className="flex items-center gap-4">
-                          <div className="w-48 bg-gray-200 rounded-full h-4">
-                            <div
-                              className="bg-green-500 h-4 rounded-full"
-                              style={{
-                                width: maxVotes > 0 ? `${(candidate.votes / maxVotes) * 100}%` : '0%',
-                              }}
-                            />
+                      <div key={candidate.id} className="flex items-center gap-4">
+                        {candidate.photo_url ? (
+                          <img
+                            src={candidate.photo_url}
+                            alt={candidate.name}
+                            className="w-16 h-16 rounded-lg object-cover border-2 border-gray-200"
+                          />
+                        ) : (
+                          <div className="w-16 h-16 rounded-lg bg-gray-200 flex items-center justify-center text-2xl font-bold text-gray-600 border-2 border-gray-200">
+                            {candidate.name.charAt(0)}
                           </div>
-                          <span className="text-sm text-gray-600 font-medium">{candidate.votes} votes</span>
+                        )}
+                        <div className="flex-1">
+                          <div className="font-bold text-gray-900 mb-1">{candidate.name}</div>
+                          <div className="flex items-center gap-4">
+                            <div className="flex-1 max-w-xs bg-gray-200 rounded-full h-4">
+                              <div
+                                className="bg-green-600 h-4 rounded-full"
+                                style={{
+                                  width: maxVotes > 0 ? `${(candidate.votes / maxVotes) * 100}%` : '0%',
+                                }}
+                              />
+                            </div>
+                            <span className="text-gray-800 font-bold min-w-20">{candidate.votes} votes</span>
+                          </div>
                         </div>
                       </div>
                     );

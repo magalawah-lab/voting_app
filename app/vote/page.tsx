@@ -16,6 +16,7 @@ export default function VotePage() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [currentPositionIndex, setCurrentPositionIndex] = useState(0);
+  const [studentEligible, setStudentEligible] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
@@ -29,9 +30,10 @@ export default function VotePage() {
   const loadData = async () => {
     console.log('🗳️ Vote page loaded, user:', user);
     setLoading(true);
-    const [candidatesRes, electionsRes] = await Promise.all([
+    const [candidatesRes, electionsRes, studentsRes] = await Promise.all([
       supabase.from('candidates').select('*'),
-      supabase.from('elections').select('*')
+      supabase.from('elections').select('*'),
+      supabase.from('students').select('*').eq('id', (user as any)?.id)
     ]);
     if (candidatesRes.data) setCandidates(candidatesRes.data);
     if (electionsRes.data) {
@@ -39,7 +41,12 @@ export default function VotePage() {
       const active = electionsRes.data.find(e => e.is_active);
       setActiveElection(active || null);
       console.log('🗳️ Active election:', active);
-      if (active && user) {
+      
+      // Check if student is eligible for this election
+      if (active && studentsRes.data && studentsRes.data.length > 0) {
+        const student = studentsRes.data[0];
+        console.log('🗳️ Student election_id:', student.election_id, 'Active election id:', active.id);
+        setStudentEligible(student.election_id === active.id || student.election_id === null);
         checkVotes(active.id);
       }
     }
@@ -48,8 +55,8 @@ export default function VotePage() {
 
   const checkVotes = async (electionId: string) => {
     if (!user || user.type !== 'student') return;
-    console.log('🗳️ Checking votes for student:', user.id, 'in election:', electionId);
-    const { data, error } = await supabase.from('votes').select('*').eq('election_id', electionId).eq('student_id', user.id);
+    console.log('🗳️ Checking votes for student:', (user as any).id, 'in election:', electionId);
+    const { data, error } = await supabase.from('votes').select('*').eq('election_id', electionId).eq('student_id', (user as any).id);
     console.log('🗳️ Check votes response:', { data, error });
     
     if (data && data.length > 0) {
@@ -75,7 +82,7 @@ export default function VotePage() {
     try {
       const votesToInsert = Object.entries(votes).map(([position, candidateId]) => ({
         election_id: activeElection.id,
-        student_id: user.id,
+        student_id: (user as any).id,
         candidate_id: candidateId,
         position: position
       }));
@@ -152,9 +159,27 @@ export default function VotePage() {
     </div>
   );
 
+  if (!studentEligible) return (
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-teal-100 flex items-center justify-center py-8 px-4">
+      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center">
+        <div className="text-5xl mb-4">🚫</div>
+        <h1 className="text-2xl font-bold text-gray-900 mb-4">Not Eligible</h1>
+        <p className="text-gray-600 mb-6">You are not eligible to vote in this election.</p>
+        <div className="space-y-3">
+          <button
+            onClick={() => { logout(); router.push('/'); }}
+            className="w-full py-3 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300"
+          >
+            Logout
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-teal-50 to-emerald-100 py-8 px-4">
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Cast Your Vote</h1>
@@ -207,43 +232,37 @@ export default function VotePage() {
           </div>
 
           <div className="p-6">
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
               {currentCandidates.map(candidate => (
                 <div
                   key={candidate.id}
                   onClick={() => handleVote(currentPosition, candidate.id)}
-                  className={`p-5 rounded-xl border-2 transition-all duration-200 cursor-pointer ${
+                  className={`p-5 rounded-xl border-2 transition-all duration-200 cursor-pointer flex flex-col items-center text-center ${
                     votes[currentPosition] === candidate.id 
                       ? 'border-green-500 bg-green-50 shadow-md' 
                       : 'border-gray-200 hover:border-green-400 hover:bg-green-50'
                   }`}
                 >
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      {candidate.photo_url ? (
-                        <img
-                          src={candidate.photo_url}
-                          alt={candidate.name}
-                          className="w-28 h-28 rounded-lg object-cover border-2 border-gray-200"
-                        />
-                      ) : (
-                        <div className={`w-28 h-28 rounded-lg flex items-center justify-center text-4xl font-bold ${
-                          votes[currentPosition] === candidate.id ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'
-                        }`}>
-                          {candidate.name.charAt(0)}
-                        </div>
-                      )}
-                      <div>
-                        <div className="font-semibold text-gray-900">{candidate.name}</div>
-                        {candidate.manifesto && (
-                          <p className="text-sm text-gray-600 mt-1">{candidate.manifesto}</p>
-                        )}
-                      </div>
+                  {candidate.photo_url ? (
+                    <img
+                      src={candidate.photo_url}
+                      alt={candidate.name}
+                      className="w-32 h-32 rounded-lg object-cover border-2 border-gray-200 mb-3"
+                    />
+                  ) : (
+                    <div className={`w-32 h-32 rounded-lg flex items-center justify-center text-5xl font-bold mb-3 ${
+                      votes[currentPosition] === candidate.id ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'
+                    }`}>
+                      {candidate.name.charAt(0)}
                     </div>
-                    {votes[currentPosition] === candidate.id && (
-                      <div className="text-green-500 text-2xl flex-shrink-0">✓</div>
-                    )}
-                  </div>
+                  )}
+                  <div className="font-semibold text-gray-900">{candidate.name}</div>
+                  {candidate.manifesto && (
+                    <p className="text-sm text-gray-700 mt-2">{candidate.manifesto}</p>
+                  )}
+                  {votes[currentPosition] === candidate.id && (
+                    <div className="text-green-500 text-3xl mt-3">✓</div>
+                  )}
                 </div>
               ))}
             </div>

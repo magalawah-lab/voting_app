@@ -167,7 +167,7 @@ export default function AdminAnalyticsPage() {
   };
 
   const getResultsByPosition = () => {
-    const positions = [...new Set(filteredCandidates.map(c => c.position))];
+    const positions = [...new Set(filteredCandidates.map(c => c.position).filter((pos): pos is string => pos !== null))];
     return positions.map(position => {
       const positionCandidates = filteredCandidates.filter(c => c.position === position);
       return {

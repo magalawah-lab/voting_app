@@ -109,7 +109,7 @@ export default function VotePage() {
   };
 
   const positions = [...new Set(
-    candidates.filter(c => !activeElection || c.election_id === activeElection.id || !c.election_id).map(c => c.position)
+    candidates.filter(c => !activeElection || c.election_id === activeElection.id || !c.election_id).map(c => c.position).filter((pos): pos is string => pos !== null)
   )];
   const currentPosition = positions[currentPositionIndex];
   const currentCandidates = candidates.filter(c => 

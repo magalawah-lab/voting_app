@@ -27,7 +27,7 @@ export interface Candidate {
   id: string;
   election_id: string | null;
   name: string;
-  position: string;
+  position: string | null;
   manifesto: string | null;
   photo_url: string | null;
   created_at: string;

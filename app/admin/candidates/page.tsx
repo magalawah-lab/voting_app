@@ -11,7 +11,10 @@ export default function AdminCandidatesPage() {
   const [elections, setElections] = useState<Election[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [editingCandidate, setEditingCandidate] = useState<Candidate | null>(null);
+  const [editingPosition, setEditingPosition] = useState<string | null>(null);
+  const [newPositionName, setNewPositionName] = useState('');
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -20,6 +23,9 @@ export default function AdminCandidatesPage() {
     photo_url: '',
     election_id: ''
   });
+
+  // Get unique positions from existing candidates
+  const positions = [...new Set(candidates.map(c => c.position).filter((pos): pos is string => pos !== null))];
 
   useEffect(() => {
     loadData();
@@ -50,6 +56,7 @@ export default function AdminCandidatesPage() {
     try {
       const dataToInsert = {
         ...formData,
+        position: formData.position || null,
         election_id: formData.election_id || null
       };
       const { error } = await supabase.from('candidates').insert([dataToInsert]).select();
@@ -72,7 +79,7 @@ export default function AdminCandidatesPage() {
     setEditingCandidate(candidate);
     setFormData({
       name: candidate.name,
-      position: candidate.position,
+      position: candidate.position || '',
       manifesto: candidate.manifesto || '',
       photo_url: candidate.photo_url || '',
       election_id: candidate.election_id || ''
@@ -86,6 +93,7 @@ export default function AdminCandidatesPage() {
     try {
       const dataToUpdate = {
         ...formData,
+        position: formData.position || null,
         election_id: formData.election_id || null
       };
       const { error } = await supabase.from('candidates').update(dataToUpdate).eq('id', editingCandidate.id);
@@ -129,6 +137,107 @@ export default function AdminCandidatesPage() {
     }
   };
 
+  const downloadTemplate = () => {
+    const templateContent = 'name,position,election_name,manifesto,photo_url\nJohn Doe,President,Student Council 2024,My manifesto,https://example.com/photo.jpg\nJane Smith,Vice President,Student Council 2024,,https://example.com/photo2.jpg';
+    const blob = new Blob([templateContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'candidates_template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const csvContent = event.target?.result as string;
+        const lines = csvContent.split('\n').filter(line => line.trim());
+        
+        const candidatesToInsert = [];
+        
+        for (let i = 1; i < lines.length; i++) {
+          const values = lines[i].split(',').map(v => v.trim());
+          if (values.length >= 2) {
+            const electionName = values[2] || '';
+            const election = elections.find(e => e.name === electionName);
+            candidatesToInsert.push({
+              name: values[0],
+              position: values[1],
+              election_id: election?.id || null,
+              manifesto: values[3] || null,
+              photo_url: values[4] || null
+            });
+          }
+        }
+
+        if (candidatesToInsert.length > 0) {
+          const { error } = await supabase.from('candidates').insert(candidatesToInsert);
+          if (error) {
+            setMessage({ text: `Failed to import candidates: ${error.message}`, type: 'error' });
+          } else {
+            setMessage({ text: `Successfully imported ${candidatesToInsert.length} candidates!`, type: 'success' });
+            setTimeout(() => setMessage(null), 5000);
+            loadData();
+            setShowImport(false);
+          }
+        }
+      } catch (err) {
+        setMessage({ text: 'Failed to import candidates', type: 'error' });
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleEditPosition = (position: string) => {
+    setEditingPosition(position);
+    setNewPositionName(position);
+  };
+
+  const handleUpdatePosition = async () => {
+    if (!editingPosition || !newPositionName) return;
+
+    try {
+      // Update all candidates with the old position to the new one
+      const { error } = await supabase.from('candidates').update({ position: newPositionName }).eq('position', editingPosition);
+      if (error) {
+        console.error('Error updating position:', error);
+        setMessage({ text: `Failed to update position: ${error.message}`, type: 'error' });
+        return;
+      }
+      setEditingPosition(null);
+      setNewPositionName('');
+      setMessage({ text: 'Position updated successfully!', type: 'success' });
+      setTimeout(() => setMessage(null), 5000);
+      loadData();
+    } catch (err) {
+      setMessage({ text: `Failed to update position: ${err}`, type: 'error' });
+    }
+  };
+
+  const handleDeletePosition = async (position: string) => {
+    if (!confirm(`Are you sure you want to delete the position "${position}"? This will not delete candidates, but they will lose their position.`)) return;
+
+    try {
+      // Set position to null for all candidates with this position
+      const { error } = await supabase.from('candidates').update({ position: null }).eq('position', position);
+      if (error) {
+        console.error('Error deleting position:', error);
+        setMessage({ text: `Failed to delete position: ${error.message}`, type: 'error' });
+        return;
+      }
+      setMessage({ text: 'Position deleted successfully!', type: 'success' });
+      setTimeout(() => setMessage(null), 5000);
+      loadData();
+    } catch (err) {
+      setMessage({ text: `Failed to delete position: ${err}`, type: 'error' });
+    }
+  };
+
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
 
   return (
@@ -140,19 +249,106 @@ export default function AdminCandidatesPage() {
               ← Back to Admin Panel
             </Link>
           </div>
-          <div className="flex flex-wrap justify-between items-center mb-8 gap-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
             <h1 className="text-3xl font-bold text-gray-900">Manage Candidates</h1>
-            <button
-              onClick={() => setShowAddForm(!showAddForm)}
-              className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              {showAddForm ? 'Cancel' : 'Add Candidate'}
-            </button>
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => setShowImport(!showImport)}
+                className="px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700"
+              >
+                {showImport ? 'Cancel Import' : 'Import Candidates'}
+              </button>
+              <button
+                onClick={() => setShowAddForm(!showAddForm)}
+                className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                {showAddForm ? 'Cancel' : 'Add Candidate'}
+              </button>
+            </div>
           </div>
+
+          {/* Show existing positions */}
+          {positions.length > 0 && (
+            <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">Existing Positions:</h3>
+              <div className="flex flex-wrap gap-2">
+                {positions.map((pos, i) => (
+                  <div key={i} className="flex items-center gap-2 bg-blue-100 text-blue-800 rounded-full px-3 py-2">
+                    {editingPosition === pos ? (
+                      <>
+                        <input
+                          type="text"
+                          value={newPositionName}
+                          onChange={(e) => setNewPositionName(e.target.value)}
+                          className="px-2 py-1 border border-blue-300 rounded bg-blue-50 text-blue-800 text-sm"
+                          placeholder="New position name"
+                        />
+                        <button
+                          onClick={handleUpdatePosition}
+                          className="text-green-700 hover:text-green-900 font-bold text-sm"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingPosition(null);
+                            setNewPositionName('');
+                          }}
+                          className="text-gray-600 hover:text-gray-800 font-bold text-sm"
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="font-medium">{pos}</span>
+                        <button
+                          onClick={() => handleEditPosition(pos)}
+                          className="text-blue-700 hover:text-blue-900 font-bold text-sm"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeletePosition(pos)}
+                          className="text-red-700 hover:text-red-900 font-bold text-sm"
+                        >
+                          ×
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {message && (
             <div className={`mb-6 rounded-lg p-4 ${message.type === 'success' ? 'bg-green-50 border border-green-300 text-green-800' : 'bg-red-50 border border-red-300 text-red-800'}`}>
               {message.text}
+            </div>
+          )}
+
+          {showImport && (
+            <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+              <h2 className="text-xl font-semibold mb-4">Import Candidates from CSV</h2>
+              <div className="space-y-4">
+                <p className="text-gray-600">Upload a CSV file with candidate data. Download the template below for the correct format.</p>
+                <button
+                  onClick={downloadTemplate}
+                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-medium"
+                >
+                  Download Sample Template
+                </button>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Select CSV File</label>
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileUpload}
+                    className="w-full border border-gray-300 rounded-lg p-2"
+                  />
+                </div>
+              </div>
             </div>
           )}
 
@@ -174,11 +370,18 @@ export default function AdminCandidatesPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Position</label>
                   <input
                     type="text"
+                    list="positions-list"
                     value={formData.position}
                     onChange={(e) => setFormData({ ...formData, position: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                    placeholder="Select or type a new position"
                     required
                   />
+                  <datalist id="positions-list">
+                    {positions.map((pos, i) => (
+                      <option key={i} value={pos}>{pos}</option>
+                    ))}
+                  </datalist>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Election</label>
@@ -317,6 +520,10 @@ export default function AdminCandidatesPage() {
                   <h3 className="text-xl font-semibold text-gray-900">{candidate.name}</h3>
                   <p className="text-blue-600 font-medium mt-1">{candidate.position}</p>
                   {candidate.manifesto && <p className="text-sm text-gray-600 mt-2">{candidate.manifesto}</p>}
+                  {/* Show election if assigned */}
+                  {candidate.election_id && elections.find(e => e.id === candidate.election_id) && (
+                    <p className="text-xs text-gray-500 mt-2">Election: {elections.find(e => e.id === candidate.election_id)?.name}</p>
+                  )}
                 </div>
                 <div className="flex gap-2 mt-4 pt-4 border-t border-gray-100">
                   <button

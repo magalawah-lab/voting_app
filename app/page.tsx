@@ -5,7 +5,7 @@ export default function Home() {
     <div className="flex flex-col flex-1 items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
       <main className="flex flex-1 w-full max-w-4xl flex-col items-center justify-center py-12 px-6">
         <div className="text-center space-y-8">
-          <h1 className="text-4xl font-bold text-gray-900 sm:text-5xl">Slana Voting Portal for 2026 Elections</h1>
+          <h1 className="text-4xl font-bold text-gray-900 sm:text-5xl">Slana Voting Portal for git2026 Elections</h1>
           <p className="text-xl text-gray-700 max-w-2xl">
             Every vote you cast helps shape the future of our school community.
           </p>
